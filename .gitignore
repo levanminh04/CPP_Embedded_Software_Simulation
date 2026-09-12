@@ -2,6 +2,7 @@
 build/
 .tools/
 .history/
+AGENTS.md
 *.exe
 *.o
 *.obj
