@@ -1,0 +1,13 @@
+# Source repository ignores generated output and local tools.
+build/
+.tools/
+*.exe
+*.o
+*.obj
+*.pdb
+logs/*.log
+!logs/.gitkeep
+.vs/
+.vscode/*.local.json
+*.user
+*.suo
