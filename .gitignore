@@ -1,6 +1,7 @@
 # Source repository ignores generated output and local tools.
 build/
 .tools/
+.history/
 *.exe
 *.o
 *.obj
