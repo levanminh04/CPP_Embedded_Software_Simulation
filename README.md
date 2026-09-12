@@ -13,13 +13,22 @@ Giai đoạn 0: chốt môi trường và workflow. Chưa tạo codebase.
 | Compiler | w64devkit v2.9.1 x64, GCC 16.2 |
 | Build/test | Dùng script chung trong repo |
 
-Tải compiler từ [w64devkit v2.9.1](https://github.com/skeeto/w64devkit/releases/tag/v2.9.1). IDE có thể khác nhau, nhưng mọi người phải build bằng compiler và script thống nhất. Không commit compiler, file build, `.exe`, log hoặc file sinh tự động.
+### Cách cài compiler (làm một lần trên mỗi máy)
 
-Kiểm tra sau khi cài:
+1. Mở trang [w64devkit v2.9.1](https://github.com/skeeto/w64devkit/releases/tag/v2.9.1).
+2. Kéo xuống mục **Assets** và tải file bản x64 có tên gần giống `w64devkit-2.9.1.exe` (không tải Source code).
+3. Chạy file vừa tải. Khi được hỏi thư mục cài, chọn đúng:
+
+   `C:\tools\w64devkit-2.9.1`
+
+   Nếu thư mục `C:\tools` chưa có thì trình cài đặt sẽ tạo. Không đặt compiler bên trong repo Git.
+4. Mở PowerShell mới và chạy lệnh kiểm tra:
 
 ```powershell
 & 'C:\tools\w64devkit-2.9.1\bin\g++.exe' --version
 ```
+
+Kết quả phải hiển thị GCC `16.2.0`. IDE có thể khác nhau, nhưng mọi người phải build bằng compiler và script thống nhất. Không commit compiler, file build, `.exe`, log hoặc file sinh tự động.
 
 ## Workflow Git
 
