@@ -1,0 +1,32 @@
+digraph SmartTrafficBlockDiagram {
+  graph [rankdir=LR, bgcolor="white", pad="0.25", nodesep="0.55", ranksep="0.75"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11, color="#334155", fillcolor="#F8FAFC", margin="0.16,0.10"];
+  edge [fontname="Arial", fontsize=9, color="#475569", arrowsize=0.75];
+
+  input [label="Input / Event\nKeyboard or scenario\nP, E, clear command", fillcolor="#DBEAFE"];
+  sensor [label="Traffic Sensor\nSimulated NS/EW counts\nValidate samples", fillcolor="#DBEAFE"];
+  config [label="Configuration\nDurations and thresholds\nValidate at startup", fillcolor="#FEF3C7"];
+  timer [label="Timer / Scheduler\nchrono tick and sleep", fillcolor="#FEF3C7"];
+  controller [label="Traffic Controller\nFSM, priority, safety\nnext state and commands", fillcolor="#DCFCE7", penwidth=2];
+  output [label="Output / Actuator\nMap decision to lights", fillcolor="#EDE9FE"];
+  display [label="Console Display\nLights, state, countdown", fillcolor="#FCE7F3"];
+  logger [label="Logger\nsystem.log via fstream", fillcolor="#FCE7F3"];
+  app [label="Application / Control Loop\nread -> decide -> update\ndisplay/log -> wait", fillcolor="#E2E8F0"];
+
+  {rank=same; input; sensor; config; timer}
+  {rank=same; display; logger}
+
+  app -> input [label="poll"];
+  app -> sensor [label="sample"];
+  app -> timer [label="tick"];
+  config -> controller [label="validated settings"];
+  input -> controller [label="event"];
+  sensor -> controller [label="validated count"];
+  timer -> controller [label="elapsed time"];
+  controller -> output [label="light command"];
+  output -> display [label="light snapshot"];
+  controller -> display [label="state / remaining"];
+  controller -> logger [label="transition / event / error"];
+  sensor -> logger [label="sensor error"];
+  config -> logger [label="config error"];
+}

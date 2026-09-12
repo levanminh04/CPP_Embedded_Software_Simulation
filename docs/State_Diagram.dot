@@ -1,0 +1,34 @@
+digraph SmartTrafficStateDiagram {
+  graph [rankdir=TB, bgcolor="white", pad="0.25", nodesep="0.35", ranksep="0.50", labelloc="t", label="Smart Traffic Light Controller - Business State Diagram", fontname="Arial", fontsize=18];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=10, color="#334155", fillcolor="#F8FAFC", margin="0.16,0.10"];
+  edge [fontname="Arial", fontsize=9, color="#475569", arrowsize=0.75];
+
+  start [shape=point, width=0.15, label=""];
+  startup [label="Startup ALL-RED\nall lights RED\nnext vehicle = NS", fillcolor="#FEE2E2"];
+  green [label="Vehicle GREEN\nNS or EW selected\nfinite duration", fillcolor="#DCFCE7"];
+  yellow [label="Vehicle YELLOW\nsame direction\nclearance begins", fillcolor="#FEF3C7"];
+  allred [label="ALL-RED decision point\nall lights RED", fillcolor="#FEE2E2"];
+  emergencyDecision [shape=diamond, label="Emergency\npending?", fillcolor="#FFE4E6"];
+  pedestrianDecision [shape=diamond, label="Pedestrian\nrequest?", fillcolor="#DBEAFE"];
+  walk [label="Pedestrian WALK\nvehicles RED\npedestrian GREEN", fillcolor="#DCFCE7"];
+  warning [label="Pedestrian WARNING\nvehicles RED", fillcolor="#FEF3C7"];
+  emergency [label="EMERGENCY\nNS RED, EW RED, PED RED\nno old timer resumed", fillcolor="#FECACA", penwidth=2];
+  clear [label="Clear emergency event\nrestart safely", fillcolor="#E2E8F0"];
+  note [shape=note, label="Business rules, not code enum names:\n- alternate NS and EW turns\n- sample density before selected GREEN\n- P is latched and served only safely\n- reset served P at WALK start\n- a new P during WALK waits for a later turn\n- E during YELLOW, ALL-RED, or WARNING is latched\n  and checked at the next safe decision point", fillcolor="#F8FAFC"];
+
+  start -> startup;
+  startup -> green [label="startup clearance complete"];
+  green -> yellow [label="timer expires or E\n(latch E)"];
+  yellow -> allred [label="timer expires"];
+  allred -> emergencyDecision;
+  emergencyDecision -> emergency [label="yes", color="#BE123C", fontcolor="#BE123C"];
+  emergencyDecision -> pedestrianDecision [label="no"];
+  pedestrianDecision -> walk [label="yes"];
+  pedestrianDecision -> green [label="no: next vehicle direction"];
+  walk -> warning [label="timer expires or E\n(latch E)"];
+  warning -> allred [label="timer expires"];
+  emergency -> clear [label="clear event"];
+  clear -> startup [label="discard old countdown"];
+
+  note -> allred [style=dashed, arrowhead=none, color="#94A3B8"];
+}
