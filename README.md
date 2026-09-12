@@ -16,12 +16,16 @@ Giai đoạn 0: chốt môi trường và workflow. Chưa tạo codebase.
 ### Cách cài compiler (làm một lần trên mỗi máy)
 
 1. Mở trang [w64devkit v2.9.1](https://github.com/skeeto/w64devkit/releases/tag/v2.9.1).
-2. Kéo xuống mục **Assets** và tải file bản x64 có tên gần giống `w64devkit-2.9.1.exe` (không tải Source code).
-3. Chạy file vừa tải. Khi được hỏi thư mục cài, chọn đúng:
+2. Kéo xuống **Assets**, tải gói **Windows x64** có tên bắt đầu bằng `w64devkit` và kết thúc bằng `.exe`. Không tải `x86` hoặc `Source code`.
+3. Đây là file tự giải nén. Chạy file vừa tải và chọn thư mục đích:
 
    `C:\tools\w64devkit-2.9.1`
 
-   Nếu thư mục `C:\tools` chưa có thì trình cài đặt sẽ tạo. Không đặt compiler bên trong repo Git.
+   Nếu `C:\tools` chưa có, hãy tạo thư mục này trước. Sau khi giải nén, phải nhìn thấy file:
+
+   `C:\tools\w64devkit-2.9.1\bin\g++.exe`
+
+   Nếu file bị giải nén thành thư mục lồng nhau, di chuyển thư mục chứa `bin` về đúng đường dẫn trên. Không đặt compiler bên trong repo Git.
 4. Mở PowerShell mới và chạy lệnh kiểm tra:
 
 ```powershell
