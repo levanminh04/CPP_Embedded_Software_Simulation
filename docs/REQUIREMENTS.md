@@ -12,6 +12,12 @@ Chương trình là mô phỏng C++ chạy trên console. Hệ thống mô phỏ
 
 Ngoài phạm vi: phần cứng thật, vi điều khiển, GUI, cơ sở dữ liệu, mạng, Web API, camera, AI/ML, mô phỏng làn xe, mũi tên rẽ và sensor thật.
 
+### 1.1. Phạm vi triển khai theo giai đoạn
+
+Phiên bản nền ưu tiên luồng tương tác bằng bàn phím để nhóm hoàn thành và kiểm chứng các yêu cầu bắt buộc trước. Các nguồn tạo sự kiện khác, ví dụ bộ sinh kịch bản demo tự động, có thể được bổ sung sau khi luồng chính ổn định.
+
+Mọi nguồn đầu vào phải tạo cùng kiểu `Event` và đi qua cùng hàm xử lý của Controller. Vì vậy, việc bổ sung kịch bản trong tương lai không được tạo một luồng nghiệp vụ hoặc một FSM thứ hai.
+
 ## 2. Luồng hệ thống bắt buộc
 
 Chương trình phải theo luồng mô phỏng phần mềm nhúng mà đề bài yêu cầu:
@@ -29,11 +35,19 @@ Xem [Sơ đồ khối](Block_Diagram.png) và file nguồn có thể chỉnh s�
 | IN-01 | Nhịp thời gian | Làm giảm countdown và kích hoạt chuyển pha theo thời gian. |
 | IN-02 | `P` - yêu cầu người đi bộ | Ghi nhận một yêu cầu đang chờ. Nhiều lần `P` khi đã chờ chỉ tính là một yêu cầu, không tạo hàng đợi. |
 | IN-03 | `E` - sự kiện khẩn cấp | Có ưu tiên vận hành cao nhất và yêu cầu hệ thống đi tới trạng thái khẩn cấp an toàn. |
-| IN-04 | Sự kiện thoát khẩn cấp | Sự kiện console/kịch bản do nhóm quy định để thoát Emergency. Ký tự lệnh cụ thể sẽ chốt khi thiết kế phần nhập liệu. |
+| IN-04 | `E` - thoát Emergency | Khi hệ thống đã ở Emergency, nhấn `E` lần nữa để yêu cầu thoát Emergency và khởi động lại chu kỳ an toàn. `E` lặp lại trong lúc đang clearance không làm khởi động lại timer. |
 | IN-05 | Số xe NS/EW | Giá trị sensor giả lập, chỉ dùng để chọn thời lượng GREEN cho lượt kế tiếp của hướng đó. |
 | IN-06 | Cấu hình | Các cặp khóa/giá trị cho thời lượng và ngưỡng mật độ; được nạp và kiểm tra trước khi chạy bình thường. |
 
-Đầu vào có thể được sinh từ kịch bản hoặc nhập từ bàn phím. Mọi đầu vào phải được kiểm tra hợp lệ trước khi Controller xử lý.
+Ở phiên bản nền, đầu vào vận hành được nhập từ bàn phím:
+
+- `P`: tạo yêu cầu người đi bộ.
+- `E`: yêu cầu vào Emergency; khi đã ở Emergency, `E` yêu cầu thoát.
+- `Q`: kết thúc chương trình.
+- `NS <số xe>`: cập nhật sensor hướng Bắc-Nam, ví dụ `NS 20`.
+- `EW <số xe>`: cập nhật sensor hướng Đông-Tây, ví dụ `EW 4`.
+
+Input phải kiểm tra cú pháp trước khi Controller xử lý. Một nguồn sự kiện tự động có thể được thêm ở giai đoạn demo, nhưng phải tạo cùng kiểu `Event` như Input bàn phím.
 
 ## 4. Đầu ra và thông tin hiển thị
 
@@ -110,7 +124,7 @@ Project phải xử lý tối thiểu hai tình huống bất thường mà khô
 1. Số xe âm hoặc không hợp lệ không được phân loại thành mật độ bình thường. Hệ thống ghi `SENSOR_ERROR`; timer đang chạy không đổi và dùng thời lượng fallback an toàn khi hướng đó bắt đầu GREEN ở lượt sau.
 2. Cấu hình không hợp lệ, ví dụ thời lượng không dương hoặc thứ tự ngưỡng sai, bị từ chối. Hệ thống ghi `CONFIG_ERROR` và dùng toàn bộ cấu hình mặc định.
 
-Lệnh từ bàn phím/kịch bản không hợp lệ phải được báo và ghi log lỗi; chúng không được làm sai trạng thái Controller.
+Lệnh không hợp lệ phải được báo và ghi log lỗi; chúng không được làm sai trạng thái Controller. Quy tắc này áp dụng cho Input bàn phím và mọi nguồn tạo `Event` được bổ sung sau này.
 
 ## 6. Bất biến an toàn và thứ tự ưu tiên
 
@@ -128,9 +142,11 @@ Thứ tự ưu tiên khi ra quyết định là: an toàn, Emergency, hoàn tấ
 
 Xem [Sơ đồ trạng thái](State_Diagram.png) và file nguồn [State_Diagram.dot](State_Diagram.dot).
 
-## 7. Kịch bản chấp nhận
+## 7. Các luồng cần kiểm thử
 
-| Mã | Kịch bản | Kết quả mong đợi |
+Các mục dưới đây mô tả hành vi cần kiểm thử; chúng không yêu cầu chương trình phải có module chạy kịch bản tự động.
+
+| Mã | Luồng kiểm thử | Kết quả mong đợi |
 |---|---|---|
 | AT-01 | Chạy bình thường | Quyền đi luân phiên GREEN -> YELLOW -> ALL-RED; có countdown và log. |
 | AT-02 | `P` trong lúc xe GREEN | Request được log và chỉ phục vụ ở điểm quyết định an toàn. |
@@ -159,7 +175,7 @@ Các nội dung sau cố ý chưa bị chốt trong requirements:
 - Tên phần tử `enum class` và số lượng state nội bộ chính xác.
 - Dùng nhiều ALL-RED state riêng hay dùng một phase ALL-RED kèm dữ liệu hướng đích/cờ chờ.
 - Tên class và mức độ tách file, miễn trách nhiệm module rõ ràng.
-- Cú pháp lệnh bàn phím và định dạng file kịch bản.
+- Định dạng dữ liệu cho bộ sinh kịch bản demo nếu nhóm bổ sung ở giai đoạn sau.
 - Cách cài đặt parser cho `default.cfg`.
 
-Mọi lựa chọn cài đặt phải giữ đúng requirements, bất biến an toàn, sơ đồ và kịch bản chấp nhận ở trên.
+Mọi lựa chọn cài đặt phải giữ đúng requirements, bất biến an toàn, sơ đồ và các luồng kiểm thử ở trên.
