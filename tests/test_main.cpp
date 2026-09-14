@@ -1,14 +1,41 @@
+#include "traffic/EventSimulator.h"
+#include "traffic/InputValidator.h"
+#include "traffic/Sensor.h"
+
 #include <cassert>
 #include <iostream>
-#include <string>
+
+using namespace std;
+using namespace traffic;
 
 int main() {
-    constexpr int cxxStandardSmokeValue = 17;
-    static_assert(cxxStandardSmokeValue == 17, "C++17 is required");
+    Config config = Config::defaults();
+    assert(config.isValid());
 
-    const std::string projectName = "Smart Traffic Light Controller";
-    assert(!projectName.empty());
+    TrafficDensitySensor sensor(config);
+    assert(sensor.update(Direction::NS, 3).density == TrafficDensity::LOW);
+    assert(sensor.update(Direction::NS, 10).density == TrafficDensity::MEDIUM);
+    assert(sensor.update(Direction::NS, 20).density == TrafficDensity::HIGH);
 
-    std::cout << "Smoke test passed.\n";
+    SensorReading invalidReading = sensor.update(Direction::EW, -5);
+    assert(!invalidReading.valid);
+    assert(invalidReading.density == TrafficDensity::LOW);
+
+    int vehicleCount;
+    assert(!parseVehicleCount("abc", vehicleCount));
+    assert(parseVehicleCount("20", vehicleCount));
+    assert(vehicleCount == 20);
+
+    EventSimulator events;
+    assert(events.parseLine("P").type == EventType::PEDESTRIAN_REQUEST);
+    assert(events.parseLine("E").type == EventType::EMERGENCY_TOGGLE);
+    assert(events.parseLine("NS abc").type == EventType::INVALID_INPUT);
+
+    Event sensorEvent = events.parseLine("EW 4");
+    assert(sensorEvent.type == EventType::SENSOR_UPDATE);
+    assert(sensorEvent.direction == Direction::EW);
+    assert(sensorEvent.vehicleCount == 4);
+
+    cout << "Input sensor tests passed.\n";
     return 0;
 }

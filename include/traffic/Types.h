@@ -77,4 +77,4 @@ struct SystemSnapshot {
     bool emergencyPending = false;
 };
 
-} // namespace traffic
+}

@@ -15,7 +15,7 @@ struct Config {
     int densityMediumMax = 15;
 
     static Config defaults();
-    bool isValid() const;
+    bool isValid();
 };
 
-} // namespace traffic
+} 
