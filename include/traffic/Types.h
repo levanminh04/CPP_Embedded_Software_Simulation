@@ -9,6 +9,18 @@ enum class Direction {
     EW
 };
 
+enum class TrafficDensity {
+    LOW,
+    MEDIUM,
+    HIGH
+};
+
+struct SensorReading {
+    int vehicleCount = 0;
+    TrafficDensity density = TrafficDensity::LOW;
+    bool valid = true;
+};
+
 enum class TrafficState {
     STARTUP_ALL_RED,
     NS_GREEN,
