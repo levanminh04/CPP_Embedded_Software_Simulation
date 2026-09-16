@@ -161,9 +161,13 @@ void Controller::handleExpiredState() {
 
 void Controller::chooseNextVehiclePhase() {
     const Direction activeDirection = currentSnapshot.nextDirection;
+    const TrafficDensity sampledDensity = readTrafficDensity(activeDirection);
     const TrafficState nextGreenState = greenStateFor(activeDirection);
 
-    enterState(nextGreenState, durationFor(nextGreenState, activeDirection));
+    // Density is sampled exactly before a vehicle GREEN starts.
+    // The selected duration is fixed for this GREEN turn.
+    // Sensor updates during the turn are kept for the next turn.
+    enterState(nextGreenState, greenDurationFor(sampledDensity));
     currentSnapshot.nextDirection = opposite(activeDirection);
 }
 
@@ -177,8 +181,7 @@ void Controller::startEmergencyClearance() {}
 
 int Controller::durationFor(TrafficState state, Direction direction) const {
     if (state == TrafficState::NS_GREEN || state == TrafficState::EW_GREEN) {
-        const SensorReading& reading = direction == Direction::NS ? nsReading : ewReading;
-        return greenDurationFor(reading.density);
+        return greenDurationFor(readTrafficDensity(direction));
     }
 
     if (state == TrafficState::NS_YELLOW || state == TrafficState::EW_YELLOW) {
@@ -198,6 +201,11 @@ int Controller::durationFor(TrafficState state, Direction direction) const {
     }
 
     return 0;
+}
+
+TrafficDensity Controller::readTrafficDensity(Direction direction) const {
+    const SensorReading& reading = direction == Direction::NS ? nsReading : ewReading;
+    return reading.density;
 }
 
 int Controller::greenDurationFor(TrafficDensity density) const {

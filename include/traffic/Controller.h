@@ -70,6 +70,7 @@ private:
     void startEmergencyClearance();
 
     int durationFor(TrafficState state, Direction direction) const;
+    TrafficDensity readTrafficDensity(Direction direction) const;
     int greenDurationFor(TrafficDensity density) const;
     TrafficState greenStateFor(Direction direction) const;
     TrafficState yellowStateFor(Direction direction) const;

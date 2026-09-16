@@ -76,6 +76,23 @@ int main() {
     assert(controller.nextDirection() == Direction::NS);
     assert(controller.remainingSeconds() == cycleConfig.greenHighTime);
 
+    const int activeEwGreenRemaining = controller.remainingSeconds();
+    controller.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 0));
+    controller.updateSensor(Direction::NS, cycleSensor.update(Direction::NS, 20));
+    assert(controller.remainingSeconds() == activeEwGreenRemaining);
+
+    advance(controller, cycleConfig.greenHighTime);
+    assert(controller.state() == TrafficState::EW_YELLOW);
+    assert(controller.remainingSeconds() == cycleConfig.yellowTime);
+
+    advance(controller, cycleConfig.yellowTime);
+    assert(controller.state() == TrafficState::ALL_RED_TO_NS);
+    assert(controller.remainingSeconds() == cycleConfig.allRedTime);
+
+    advance(controller, cycleConfig.allRedTime);
+    assert(controller.state() == TrafficState::NS_GREEN);
+    assert(controller.remainingSeconds() == cycleConfig.greenHighTime);
+
     Controller ignoredEventsController(cycleConfig);
     ignoredEventsController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
     ignoredEventsController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
