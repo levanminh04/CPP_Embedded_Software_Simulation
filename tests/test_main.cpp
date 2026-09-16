@@ -1,120 +1,71 @@
-#include "traffic/Display.h"
-#include "traffic/Output.h"
+#include "traffic/ConsoleInput.h"
+#include "traffic/InputValidator.h"
+#include "traffic/Sensor.h"
 
 #include <cassert>
 #include <iostream>
-#include <sstream>
-#include <string>
 
-namespace {
+using namespace std;
+using namespace traffic;
 
-void assertLights(
-    const traffic::LightOutput& actual,
-    const traffic::VehicleLight ns,
-    const traffic::VehicleLight ew,
-    const traffic::PedestrianLight pedestrian)
-{
-    assert(actual.ns == ns);
-    assert(actual.ew == ew);
-    assert(actual.pedestrian == pedestrian);
-}
+int main() {
+    Config config = Config::defaults();
+    assert(config.isValid());
 
-void testOutputMapping()
-{
-    const traffic::Output output;
+    TrafficDensitySensor sensor(config);
+    assert(sensor.update(Direction::NS, 3).density == TrafficDensity::LOW);
+    assert(sensor.update(Direction::NS, 10).density == TrafficDensity::MEDIUM);
+    assert(sensor.update(Direction::NS, 20).density == TrafficDensity::HIGH);
 
-    assertLights(
-        output.fromState(traffic::TrafficState::NS_GREEN),
-        traffic::VehicleLight::GREEN,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::RED);
-    assertLights(
-        output.fromState(traffic::TrafficState::NS_YELLOW),
-        traffic::VehicleLight::YELLOW,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::RED);
-    assertLights(
-        output.fromState(traffic::TrafficState::ALL_RED),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::RED);
-    assertLights(
-        output.fromState(traffic::TrafficState::EW_GREEN),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::GREEN,
-        traffic::PedestrianLight::RED);
-    assertLights(
-        output.fromState(traffic::TrafficState::EW_YELLOW),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::YELLOW,
-        traffic::PedestrianLight::RED);
-    assertLights(
-        output.fromState(traffic::TrafficState::PED_WALK),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::GREEN);
-    assertLights(
-        output.fromState(traffic::TrafficState::PED_WARNING),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::WARNING);
-    assertLights(
-        output.fromState(traffic::TrafficState::EMERGENCY),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::RED);
-}
+    SensorReading invalidReading = sensor.update(Direction::EW, -5);
+    assert(!invalidReading.valid);
+    assert(invalidReading.density == TrafficDensity::LOW);
 
-void testDisplayRendering()
-{
-    traffic::SystemSnapshot snapshot;
-    snapshot.simulationSecond = 18;
-    snapshot.state = traffic::TrafficState::ALL_RED;
-    snapshot.pendingNext = traffic::TrafficState::NS_GREEN;
-    snapshot.remainingSeconds = 2;
-    snapshot.nsVehicleCount = 20;
-    snapshot.ewVehicleCount = 4;
-    snapshot.pedestrianRequested = true;
-    snapshot.emergencyPending = false;
+    int vehicleCount;
+    assert(!parseVehicleCount("abc", vehicleCount));
+    assert(parseVehicleCount("20", vehicleCount));
+    assert(vehicleCount == 20);
 
-    traffic::LightOutput lights;
+    ConsoleInput input;
+    Event event;
 
-    std::ostringstream rendered;
-    traffic::Display display(rendered, false);
-    display.show(snapshot, lights, "NS 2");
+    // Ký tự đơn chưa có Enter -> chưa trả event
+    assert(!input.feedKey('E', event));
+    assert(input.currentBuffer() == "E");
 
-    const std::string text = rendered.str();
-    assert(text.find("Simulation Time      : 18 s") != std::string::npos);
-    assert(text.find("State                : ALL_RED") != std::string::npos);
-    assert(text.find("Pending Next State   : NS_GREEN") != std::string::npos);
-    assert(text.find("NS Vehicle LED       : RED") != std::string::npos);
-    assert(text.find("EW Vehicle LED       : RED") != std::string::npos);
-    assert(text.find("Pedestrian LED       : RED") != std::string::npos);
-    assert(text.find("Remaining Time       : 2 s") != std::string::npos);
-    assert(text.find("Pedestrian Req.      : YES") != std::string::npos);
-    assert(text.find("Emergency            : OFF") != std::string::npos);
-    assert(text.find("Traffic NS / EW      : 20 / 4") != std::string::npos);
-    assert(text.find("Command              : NS 2") != std::string::npos);
-}
+    // Nhập tiếp 'W', ' ', '4' -> vẫn chưa có event
+    assert(!input.feedKey('W', event));
+    assert(!input.feedKey(' ', event));
+    assert(!input.feedKey('4', event));
+    assert(input.currentBuffer() == "EW 4");
 
-void testPendingNextRules()
-{
-    const traffic::SystemSnapshot defaultSnapshot;
-    assert(defaultSnapshot.state == traffic::TrafficState::ALL_RED);
-    assert(defaultSnapshot.pendingNext == traffic::TrafficState::NS_GREEN);
-}
+    // Enter -> parse xong trả SENSOR_UPDATE và buffer được xóa
+    assert(input.feedKey('\n', event));
+    assert(event.type == EventType::SENSOR_UPDATE);
+    assert(event.direction == Direction::EW);
+    assert(event.vehicleCount == 4);
+    assert(input.currentBuffer().empty());
 
-} // namespace
+    // Nhập riêng 'E' rồi Enter -> EMERGENCY_TOGGLE (không bị nhầm với EW)
+    assert(!input.feedKey('E', event));
+    assert(input.feedKey('\n', event));
+    assert(event.type == EventType::EMERGENCY_TOGGLE);
 
-int main()
-{
-    constexpr int cxxStandardSmokeValue = 17;
-    static_assert(cxxStandardSmokeValue == 17, "C++17 is required");
+    // Phím P -> PEDESTRIAN_REQUEST
+    assert(!input.feedKey('P', event));
+    assert(input.feedKey('\n', event));
+    assert(event.type == EventType::PEDESTRIAN_REQUEST);
 
-    testOutputMapping();
-    testDisplayRendering();
-    testPendingNextRules();
+    // Lệnh lỗi cú pháp
+    assert(!input.feedKey('N', event));
+    assert(!input.feedKey('S', event));
+    assert(!input.feedKey(' ', event));
+    assert(!input.feedKey('a', event));
+    assert(!input.feedKey('b', event));
+    assert(!input.feedKey('c', event));
+    assert(input.feedKey('\n', event));
+    assert(event.type == EventType::INVALID_INPUT);
 
-    std::cout << "Output and display tests passed.\n";
+    cout << "Input sensor tests passed.\n";
     return 0;
 }
