@@ -25,11 +25,14 @@ enum class TrafficState {
     STARTUP_ALL_RED,
     NS_GREEN,
     NS_YELLOW,
-    ALL_RED,
+    ALL_RED_TO_EW,
     EW_GREEN,
     EW_YELLOW,
+    ALL_RED_TO_NS,
+    ALL_RED_TO_PED,
     PED_WALK,
     PED_WARNING,
+    ALL_RED_FROM_PED,
     EMERGENCY
 };
 

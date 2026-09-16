@@ -26,12 +26,15 @@ try {
         'src/input_sensor/Sensor.cpp',
         'src/input_sensor/EventSimulator.cpp'
     )
+    $controllerSources = @(
+        'src/controller/Controller.cpp'
+    )
 
     Write-Host "Compiler: $Compiler"
-    & $Compiler @flags 'src/main.cpp' @inputSensorSources '-o' 'build/traffic.exe'
+    & $Compiler @flags 'src/main.cpp' @inputSensorSources @controllerSources '-o' 'build/traffic.exe'
     if ($LASTEXITCODE -ne 0) { throw 'Build chương trình thất bại.' }
 
-    & $Compiler @flags 'tests/test_main.cpp' @inputSensorSources '-o' 'build/traffic_tests.exe'
+    & $Compiler @flags 'tests/test_main.cpp' @inputSensorSources @controllerSources '-o' 'build/traffic_tests.exe'
     if ($LASTEXITCODE -ne 0) { throw 'Build smoke test thất bại.' }
 
     Write-Host 'Build OK.'
