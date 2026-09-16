@@ -6,8 +6,6 @@ namespace {
 const char* stateName(const TrafficState state) noexcept
 {
     switch (state) {
-    case TrafficState::STARTUP_ALL_RED:
-        return "STARTUP_ALL_RED";
     case TrafficState::NS_GREEN:
         return "NS_GREEN";
     case TrafficState::NS_YELLOW:
@@ -76,6 +74,7 @@ void Display::show(
     stream_ << "===== SMART TRAFFIC CONTROLLER =====\n"
             << "Simulation Time      : " << snapshot.simulationSecond << " s\n"
             << "State                : " << stateName(snapshot.state) << '\n'
+            << "Pending Next State   : " << stateName(snapshot.pendingNext) << '\n'
             << "NS Vehicle LED       : " << vehicleLightName(lights.ns) << '\n'
             << "EW Vehicle LED       : " << vehicleLightName(lights.ew) << '\n'
             << "Pedestrian LED       : " << pedestrianLightName(lights.pedestrian) << '\n'

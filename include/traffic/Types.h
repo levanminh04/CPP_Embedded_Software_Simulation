@@ -10,7 +10,6 @@ enum class Direction {
 };
 
 enum class TrafficState {
-    STARTUP_ALL_RED,
     NS_GREEN,
     NS_YELLOW,
     ALL_RED,
@@ -56,7 +55,8 @@ struct LightOutput {
 
 struct SystemSnapshot {
     long long simulationSecond = 0;
-    TrafficState state = TrafficState::STARTUP_ALL_RED;
+    TrafficState state = TrafficState::ALL_RED;
+    TrafficState pendingNext = TrafficState::NS_GREEN;
     Direction nextDirection = Direction::NS;
     int remainingSeconds = 0;
     int nsVehicleCount = 0;

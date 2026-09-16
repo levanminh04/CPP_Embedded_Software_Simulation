@@ -24,11 +24,6 @@ void testOutputMapping()
     const traffic::Output output;
 
     assertLights(
-        output.fromState(traffic::TrafficState::STARTUP_ALL_RED),
-        traffic::VehicleLight::RED,
-        traffic::VehicleLight::RED,
-        traffic::PedestrianLight::RED);
-    assertLights(
         output.fromState(traffic::TrafficState::NS_GREEN),
         traffic::VehicleLight::GREEN,
         traffic::VehicleLight::RED,
@@ -74,15 +69,15 @@ void testDisplayRendering()
 {
     traffic::SystemSnapshot snapshot;
     snapshot.simulationSecond = 18;
-    snapshot.state = traffic::TrafficState::NS_GREEN;
-    snapshot.remainingSeconds = 7;
+    snapshot.state = traffic::TrafficState::ALL_RED;
+    snapshot.pendingNext = traffic::TrafficState::NS_GREEN;
+    snapshot.remainingSeconds = 2;
     snapshot.nsVehicleCount = 20;
     snapshot.ewVehicleCount = 4;
     snapshot.pedestrianRequested = true;
     snapshot.emergencyPending = false;
 
     traffic::LightOutput lights;
-    lights.ns = traffic::VehicleLight::GREEN;
 
     std::ostringstream rendered;
     traffic::Display display(rendered, false);
@@ -90,15 +85,23 @@ void testDisplayRendering()
 
     const std::string text = rendered.str();
     assert(text.find("Simulation Time      : 18 s") != std::string::npos);
-    assert(text.find("State                : NS_GREEN") != std::string::npos);
-    assert(text.find("NS Vehicle LED       : GREEN") != std::string::npos);
+    assert(text.find("State                : ALL_RED") != std::string::npos);
+    assert(text.find("Pending Next State   : NS_GREEN") != std::string::npos);
+    assert(text.find("NS Vehicle LED       : RED") != std::string::npos);
     assert(text.find("EW Vehicle LED       : RED") != std::string::npos);
     assert(text.find("Pedestrian LED       : RED") != std::string::npos);
-    assert(text.find("Remaining Time       : 7 s") != std::string::npos);
+    assert(text.find("Remaining Time       : 2 s") != std::string::npos);
     assert(text.find("Pedestrian Req.      : YES") != std::string::npos);
     assert(text.find("Emergency            : OFF") != std::string::npos);
     assert(text.find("Traffic NS / EW      : 20 / 4") != std::string::npos);
     assert(text.find("Command              : NS 2") != std::string::npos);
+}
+
+void testPendingNextRules()
+{
+    const traffic::SystemSnapshot defaultSnapshot;
+    assert(defaultSnapshot.state == traffic::TrafficState::ALL_RED);
+    assert(defaultSnapshot.pendingNext == traffic::TrafficState::NS_GREEN);
 }
 
 } // namespace
@@ -110,6 +113,7 @@ int main()
 
     testOutputMapping();
     testDisplayRendering();
+    testPendingNextRules();
 
     std::cout << "Output and display tests passed.\n";
     return 0;

@@ -25,7 +25,6 @@ LightOutput Output::fromState(const TrafficState state) const noexcept
     case TrafficState::PED_WARNING:
         lights.pedestrian = PedestrianLight::WARNING;
         break;
-    case TrafficState::STARTUP_ALL_RED:
     case TrafficState::ALL_RED:
     case TrafficState::EMERGENCY:
     default:
