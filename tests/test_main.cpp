@@ -133,6 +133,83 @@ int main()
     assert(pendingRequestsController.pedestrianRequested());
     assert(pendingRequestsController.emergencyPending());
 
+    // Pedestrian request should be served only at a safe decision point, not immediately.
+    Controller pedestrianController(cycleConfig);
+    pedestrianController.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 20));
+    advance(pedestrianController, cycleConfig.allRedTime);
+    assert(pedestrianController.state() == TrafficState::NS_GREEN);
+    pedestrianController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    assert(pedestrianController.pedestrianRequested());
+
+    advance(pedestrianController, cycleConfig.greenLowTime);
+    assert(pedestrianController.state() == TrafficState::NS_YELLOW);
+    advance(pedestrianController, cycleConfig.yellowTime);
+    assert(pedestrianController.state() == TrafficState::ALL_RED);
+    advance(pedestrianController, cycleConfig.allRedTime);
+    assert(pedestrianController.state() == TrafficState::PED_WALK);
+    assert(!pedestrianController.pedestrianRequested());
+    assert(pedestrianController.remainingSeconds() == cycleConfig.pedestrianWalkTime);
+
+    // A new request during WALK must wait until after at least one vehicle GREEN cycle.
+    Controller deferredPedestrianController(cycleConfig);
+    deferredPedestrianController.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 20));
+    advance(deferredPedestrianController, cycleConfig.allRedTime);
+    assert(deferredPedestrianController.state() == TrafficState::NS_GREEN);
+    advance(deferredPedestrianController, cycleConfig.greenLowTime);
+    advance(deferredPedestrianController, cycleConfig.yellowTime);
+    assert(deferredPedestrianController.state() == TrafficState::ALL_RED);
+    deferredPedestrianController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    advance(deferredPedestrianController, cycleConfig.allRedTime);
+    assert(deferredPedestrianController.state() == TrafficState::PED_WALK);
+    deferredPedestrianController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    advance(deferredPedestrianController, cycleConfig.pedestrianWalkTime);
+    assert(deferredPedestrianController.state() == TrafficState::PED_WARNING);
+    advance(deferredPedestrianController, cycleConfig.pedestrianWarningTime);
+    assert(deferredPedestrianController.state() == TrafficState::ALL_RED);
+    assert(deferredPedestrianController.pedestrianRequested());
+    advance(deferredPedestrianController, cycleConfig.allRedTime);
+    assert(deferredPedestrianController.state() == TrafficState::EW_GREEN);
+
+    // Emergency has highest priority and must pass through clearances safely.
+    Controller emergencyGreenController(cycleConfig);
+    emergencyGreenController.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 20));
+    advance(emergencyGreenController, cycleConfig.allRedTime);
+    assert(emergencyGreenController.state() == TrafficState::NS_GREEN);
+    emergencyGreenController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(emergencyGreenController.emergencyPending());
+    advance(emergencyGreenController, cycleConfig.greenLowTime);
+    assert(emergencyGreenController.state() == TrafficState::NS_YELLOW);
+    advance(emergencyGreenController, cycleConfig.yellowTime);
+    assert(emergencyGreenController.state() == TrafficState::ALL_RED);
+    advance(emergencyGreenController, cycleConfig.allRedTime);
+    assert(emergencyGreenController.state() == TrafficState::EMERGENCY);
+
+    Controller emergencyPedestrianController(cycleConfig);
+    emergencyPedestrianController.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 20));
+    advance(emergencyPedestrianController, cycleConfig.allRedTime);
+    emergencyPedestrianController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    advance(emergencyPedestrianController, cycleConfig.greenLowTime);
+    advance(emergencyPedestrianController, cycleConfig.yellowTime);
+    advance(emergencyPedestrianController, cycleConfig.allRedTime);
+    assert(emergencyPedestrianController.state() == TrafficState::PED_WALK);
+    emergencyPedestrianController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(emergencyPedestrianController.emergencyPending());
+    advance(emergencyPedestrianController, cycleConfig.pedestrianWalkTime);
+    assert(emergencyPedestrianController.state() == TrafficState::PED_WARNING);
+    advance(emergencyPedestrianController, cycleConfig.pedestrianWarningTime);
+    assert(emergencyPedestrianController.state() == TrafficState::ALL_RED);
+    advance(emergencyPedestrianController, cycleConfig.allRedTime);
+    assert(emergencyPedestrianController.state() == TrafficState::EMERGENCY);
+
+    Controller emergencyExitController(cycleConfig);
+    emergencyExitController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    advance(emergencyExitController, cycleConfig.allRedTime);
+    assert(emergencyExitController.state() == TrafficState::EMERGENCY);
+    emergencyExitController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(!emergencyExitController.emergencyPending());
+    assert(emergencyExitController.state() == TrafficState::ALL_RED);
+    assert(emergencyExitController.nextDirection() == Direction::NS);
+
     cout << "Smoke tests passed.\n";
     return 0;
 }

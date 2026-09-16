@@ -51,8 +51,16 @@ namespace traffic
 
         if (event.type == EventType::EMERGENCY_TOGGLE)
         {
+            const TrafficState beforeState = currentSnapshot.state;
             requestEmergencyToggle();
-            return {ControllerAction::EMERGENCY_ON_REQUESTED, currentSnapshot.state,
+
+            if (beforeState == TrafficState::EMERGENCY)
+            {
+                return {ControllerAction::EMERGENCY_OFF_REQUESTED, beforeState,
+                        currentSnapshot.state, false, "emergency exit requested"};
+            }
+
+            return {ControllerAction::EMERGENCY_ON_REQUESTED, beforeState,
                     currentSnapshot.state, false, "emergency toggle requested"};
         }
 
@@ -149,6 +157,14 @@ namespace traffic
 
     void Controller::requestPedestrian()
     {
+        // Pedestrian request flow:
+        // 1. P được ghi nhận như một cờ chờ (pending) chứ không tạo hàng đợi.
+        // 2. Khi đang chờ, controller KHÔNG bắt đầu WALK ngay trong pha xe đang chạy.
+        // 3. Yêu cầu chỉ được phục vụ ở điểm an toàn gần nhất:
+        //    - xe hiện tại đã hết GREEN
+        //    - đã qua YELLOW
+        //    - đã có ALL_RED / clearance an toàn
+        // 4. Nếu request mới xuất hiện trong PED_WALK, nó sẽ chờ tới lượt xe kế tiếp.
         if (!currentSnapshot.pedestrianRequested)
         {
             currentSnapshot.pedestrianRequested = true;
@@ -157,9 +173,31 @@ namespace traffic
 
     void Controller::requestEmergencyToggle()
     {
+        // Emergency priority:
+        // - E lần 1: đặt cờ khẩn cấp, nhưng không cắt bừa khi đang ở clearance.
+        // - Nếu đã ở EMERGENCY, E lần 2 yêu cầu thoát ra khỏi chế độ khẩn cấp.
+        // - Trong YELLOW / ALL_RED / PED_WALK / PED_WARNING, E lặp lại không reset timer.
         if (currentSnapshot.state == TrafficState::EMERGENCY)
         {
             currentSnapshot.emergencyPending = false;
+            currentSnapshot.state = TrafficState::ALL_RED;
+            currentSnapshot.remainingSeconds = config.allRedTime;
+            currentSnapshot.nextDirection = Direction::NS;
+            return;
+        }
+
+        if (currentSnapshot.emergencyPending)
+        {
+            return;
+        }
+
+        if (currentSnapshot.state == TrafficState::NS_YELLOW ||
+            currentSnapshot.state == TrafficState::EW_YELLOW ||
+            currentSnapshot.state == TrafficState::ALL_RED ||
+            currentSnapshot.state == TrafficState::PED_WALK ||
+            currentSnapshot.state == TrafficState::PED_WARNING)
+        {
+            currentSnapshot.emergencyPending = true;
             return;
         }
 
@@ -188,6 +226,11 @@ namespace traffic
     {
         currentSnapshot.state = nextState;
         currentSnapshot.remainingSeconds = durationSeconds;
+
+        if (nextState == TrafficState::NS_GREEN || nextState == TrafficState::EW_GREEN)
+        {
+            pedestrianCooldown = false;
+        }
     }
 
     void Controller::decrementTimer()
@@ -200,24 +243,72 @@ namespace traffic
 
     void Controller::handleExpiredState()
     {
+        // Pedestrian decision point:
+        // - Sau khi xe GREEN hết thời gian, controller chuyển sang YELLOW.
+        // - Sau YELLOW, controller đi vào ALL_RED để đảm bảo clearance an toàn.
+        // - Sau đó mới xét: Emergency? Pedestrian request? Lượt xe kế tiếp?
+        // - Theo requirement, pedestrian request không được xóa khi bắt đầu service,
+        //   mà phải giữ cho tới khi WALK bắt đầu, rồi mới mark là đã phục vụ.
         switch (currentSnapshot.state)
         {
         case TrafficState::STARTUP_ALL_RED:
         case TrafficState::ALL_RED:
-            chooseNextVehiclePhase();
+            if (currentSnapshot.emergencyPending)
+            {
+                currentSnapshot.state = TrafficState::EMERGENCY;
+                currentSnapshot.remainingSeconds = 0;
+                break;
+            }
+            if (shouldServePedestrian())
+            {
+                startPedestrianPhase();
+            }
+            else
+            {
+                chooseNextVehiclePhase();
+            }
             break;
         case TrafficState::NS_GREEN:
+            if (currentSnapshot.emergencyPending)
+            {
+                enterState(TrafficState::NS_YELLOW, config.yellowTime);
+                break;
+            }
             enterState(TrafficState::NS_YELLOW, config.yellowTime);
             break;
         case TrafficState::EW_GREEN:
+            if (currentSnapshot.emergencyPending)
+            {
+                enterState(TrafficState::EW_YELLOW, config.yellowTime);
+                break;
+            }
             enterState(TrafficState::EW_YELLOW, config.yellowTime);
             break;
         case TrafficState::NS_YELLOW:
         case TrafficState::EW_YELLOW:
-            chooseAllRedDestination();
+            if (currentSnapshot.emergencyPending)
+            {
+                enterState(TrafficState::ALL_RED, config.allRedTime);
+                break;
+            }
+            enterState(TrafficState::ALL_RED, config.allRedTime);
             break;
         case TrafficState::PED_WALK:
+            if (currentSnapshot.emergencyPending)
+            {
+                enterState(TrafficState::PED_WARNING, config.pedestrianWarningTime);
+                break;
+            }
+            enterState(TrafficState::PED_WARNING, config.pedestrianWarningTime);
+            break;
         case TrafficState::PED_WARNING:
+            if (currentSnapshot.emergencyPending)
+            {
+                enterState(TrafficState::ALL_RED, config.allRedTime);
+                break;
+            }
+            enterState(TrafficState::ALL_RED, config.allRedTime);
+            break;
         case TrafficState::EMERGENCY:
             break;
         }
@@ -241,7 +332,21 @@ namespace traffic
         enterState(TrafficState::ALL_RED, config.allRedTime);
     }
 
-    void Controller::startPedestrianPhase() {}
+    void Controller::startPedestrianPhase()
+    {
+        // Safe pedestrian service start:
+        // - request đang chờ là điều kiện bắt buộc
+        // - khi bắt đầu WALK thì request được xóa, vì đã được chấp nhận và phục vụ
+        // - ALL_RED và YELLOW của xe đã kết thúc, nên người đi bộ mới được phép đi
+        if (!currentSnapshot.pedestrianRequested)
+        {
+            return;
+        }
+
+        currentSnapshot.pedestrianRequested = false;
+        pedestrianCooldown = true;
+        enterState(TrafficState::PED_WALK, config.pedestrianWalkTime);
+    }
 
     void Controller::startEmergencyClearance() {}
 
@@ -344,7 +449,34 @@ namespace traffic
 
     bool Controller::shouldServePedestrian() const
     {
-        return false;
+        // Pedestrian safety rule:
+        // - chỉ phục vụ khi đã qua vòng xe hiện tại và đang ở trạng thái an toàn ALL_RED
+        // - không phục vụ khi Emergency đang active
+        // - yêu cầu phải còn đang chờ
+        // - không phục vụ lặp lại ngay trong PED_WALK/PED_WARNING
+        if (currentSnapshot.emergencyPending || currentSnapshot.state == TrafficState::EMERGENCY)
+        {
+            return false;
+        }
+
+        if (pedestrianCooldown)
+        {
+            return false;
+        }
+
+        if (!currentSnapshot.pedestrianRequested)
+        {
+            return false;
+        }
+
+        if (currentSnapshot.state == TrafficState::PED_WALK ||
+            currentSnapshot.state == TrafficState::PED_WARNING)
+        {
+            return false;
+        }
+
+        return currentSnapshot.state == TrafficState::ALL_RED ||
+               currentSnapshot.state == TrafficState::STARTUP_ALL_RED;
     }
 
 }
