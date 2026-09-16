@@ -1,3 +1,4 @@
+#include "traffic/Controller.h"
 #include "traffic/EventSimulator.h"
 #include "traffic/InputValidator.h"
 #include "traffic/Sensor.h"
@@ -7,6 +8,12 @@
 
 using namespace std;
 using namespace traffic;
+
+void advance(Controller& controller, int seconds) {
+    for (int i = 0; i < seconds; ++i) {
+        controller.tick();
+    }
+}
 
 int main() {
     Config config = Config::defaults();
@@ -36,6 +43,46 @@ int main() {
     assert(sensorEvent.direction == Direction::EW);
     assert(sensorEvent.vehicleCount == 4);
 
-    cout << "Input sensor tests passed.\n";
+    Config cycleConfig = Config::defaults();
+    cycleConfig.greenLowTime = 2;
+    cycleConfig.greenMediumTime = 3;
+    cycleConfig.greenHighTime = 4;
+    cycleConfig.yellowTime = 1;
+    cycleConfig.allRedTime = 1;
+    assert(cycleConfig.isValid());
+
+    TrafficDensitySensor cycleSensor(cycleConfig);
+    Controller controller(cycleConfig);
+    controller.updateSensor(Direction::EW, cycleSensor.update(Direction::EW, 20));
+
+    assert(controller.state() == TrafficState::STARTUP_ALL_RED);
+    assert(controller.remainingSeconds() == cycleConfig.allRedTime);
+
+    advance(controller, cycleConfig.allRedTime);
+    assert(controller.state() == TrafficState::NS_GREEN);
+    assert(controller.nextDirection() == Direction::EW);
+    assert(controller.remainingSeconds() == cycleConfig.greenLowTime);
+
+    advance(controller, cycleConfig.greenLowTime);
+    assert(controller.state() == TrafficState::NS_YELLOW);
+    assert(controller.remainingSeconds() == cycleConfig.yellowTime);
+
+    advance(controller, cycleConfig.yellowTime);
+    assert(controller.state() == TrafficState::ALL_RED_TO_EW);
+    assert(controller.remainingSeconds() == cycleConfig.allRedTime);
+
+    advance(controller, cycleConfig.allRedTime);
+    assert(controller.state() == TrafficState::EW_GREEN);
+    assert(controller.nextDirection() == Direction::NS);
+    assert(controller.remainingSeconds() == cycleConfig.greenHighTime);
+
+    Controller ignoredEventsController(cycleConfig);
+    ignoredEventsController.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    ignoredEventsController.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(ignoredEventsController.state() == TrafficState::STARTUP_ALL_RED);
+    assert(!ignoredEventsController.pedestrianRequested());
+    assert(!ignoredEventsController.emergencyPending());
+
+    cout << "Smoke tests passed.\n";
     return 0;
 }
