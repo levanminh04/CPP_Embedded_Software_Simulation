@@ -1,31 +1,39 @@
-# Input Sensor Module
+# Input & Sensor Simulation Module
 
-Module này cung cấp dữ liệu đầu vào cho Smart Traffic Light Controller Simulator.
+Tài liệu này mô tả module Input/Sensor theo sơ đồ khối `docs/Block_Diagram.dot`:
 
 ```text
-Lệnh bàn phím -> EventSimulator -> Event -> Controller
-Số xe        -> TrafficDensitySensor -> SensorReading -> Controller
+[Bàn phím] -> ConsoleInput::poll() 
+                    |
+                    v (Event)
+               Application (Bộ điều phối)
+              /           \
+   (lệnh SENSOR_UPDATE)    (lệnh P / E / Q)
+            v                     v
+  TrafficDensitySensor        Controller
+            |                     |
+     (SensorReading)              |
+            \                     /
+             v                   v
+      Application lấy mẫu trước GREEN -> Controller tính duration
 ```
 
-Module chỉ nhận và kiểm tra dữ liệu. Nó không điều khiển FSM, không đổi đèn, không giữ trạng thái Emergency/Pedestrian và không tự ghi log.
-
-## Cấu trúc file
+## 1. Cấu trúc thư mục
 
 ```text
-include/traffic/Types.h              Kiểu dữ liệu dùng chung của project
+include/traffic/Types.h              Kiểu dữ liệu chung toàn project
 include/traffic/Config.h             Cấu hình và ngưỡng mật độ
-include/traffic/InputValidator.h     Kiểm tra chuỗi số xe
-include/traffic/Sensor.h             TrafficDensitySensor
-include/traffic/EventSimulator.h     Chuyển lệnh thành Event
-src/input_sensor/Config.cpp          Cài đặt Config
-src/input_sensor/InputValidator.cpp  Cài đặt validate input
-src/input_sensor/Sensor.cpp          Cài đặt sensor và phân loại mật độ
-src/input_sensor/EventSimulator.cpp  Cài đặt parser lệnh
+include/traffic/InputValidator.h     Hàm kiểm tra chuỗi số xe
+include/traffic/Sensor.h             Class TrafficDensitySensor
+include/traffic/ConsoleInput.h       Class ConsoleInput (đọc phím + buffer)
+
+src/config/Config.cpp                Cài đặt cấu hình chung
+src/input_sensor/InputValidator.cpp  Cài đặt validate số xe
+src/input_sensor/Sensor.cpp          Cài đặt sensor NS/EW
+src/input_sensor/ConsoleInput.cpp    Cài đặt buffer và poll bàn phím
 ```
 
-## Contract dữ liệu
-
-Các kiểu này nằm trong namespace `traffic` và được Controller dùng trực tiếp.
+## 2. Kiểu dữ liệu dùng chung (`Types.h`)
 
 ```cpp
 enum class TrafficDensity {
@@ -41,165 +49,81 @@ struct SensorReading {
 };
 ```
 
-Ý nghĩa `SensorReading`:
+- `valid == false`: số xe âm hoặc sensor lỗi. Fallback an toàn là `TrafficDensity::LOW`.
+- Logger ghi `SENSOR_ERROR` khi `valid == false`.
 
-- `vehicleCount`: số xe của một hướng.
-- `density`: mật độ do Sensor phân loại.
-- `valid`: `false` khi số xe không hợp lệ, ví dụ `-5`.
-- Khi `valid == false`, `density` là `LOW` fallback an toàn. Controller không nên xem đây là mật độ LOW hợp lệ và Logger nên ghi `SENSOR_ERROR`.
+## 3. Class `ConsoleInput` (đầu vào bàn phím không chặn)
 
-Các kiểu `Direction`, `EventType` và `Event` trong `Types.h` cũng là contract với Controller.
-
-## Config
+`ConsoleInput` gom ký tự vào buffer cho đến khi người dùng nhấn **Enter**. Nhờ vậy không bị nhầm giữa `E` (Emergency) và `EW 4` (Sensor Đông-Tây).
 
 ```cpp
-Config config = Config::defaults();
+ConsoleInput input;
+Event event;
+
+if (input.poll(event)) {
+    // Chỉ vào đây khi người dùng đã nhấn Enter xong 1 lệnh
+}
 ```
 
-Giá trị mặc định:
+Hỗ trợ phím đặc biệt:
+- Ký tự thông thường: thêm vào buffer.
+- `Backspace` (`\b`): xóa 1 ký tự cuối.
+- `Esc` (mã 27): hủy bỏ toàn bộ lệnh đang gõ trong buffer.
+- `Enter` (`\r` hoặc `\n`): parse buffer thành `Event` và xóa sạch buffer.
 
-| Thành phần | Giá trị |
-|---|---:|
-| `tickMs` | 1000 |
-| `greenLowTime` | 15 |
-| `greenMediumTime` | 20 |
-| `greenHighTime` | 25 |
-| `yellowTime` | 3 |
-| `allRedTime` | 2 |
-| `pedestrianWalkTime` | 10 |
-| `pedestrianWarningTime` | 5 |
-| `densityLowMax` | 5 |
-| `densityMediumMax` | 15 |
+Bảng ánh xạ lệnh sau khi nhấn Enter:
 
-`Config::isValid()` trả về `false` nếu:
+| Lệnh trong buffer | Event type | Hướng / Giá trị |
+|---|---|---|
+| `P` | `PEDESTRIAN_REQUEST` | - |
+| `E` | `EMERGENCY_TOGGLE` | - |
+| `Q` | `QUIT` | - |
+| `NS <số xe>` | `SENSOR_UPDATE` | NS, vehicleCount |
+| `EW <số xe>` | `SENSOR_UPDATE` | EW, vehicleCount |
+| Sai cú pháp (`NS abc`, rỗng...) | `INVALID_INPUT` | - |
 
-- Một thời lượng nhỏ hơn hoặc bằng `0`.
-- `densityLowMax` nhỏ hơn `0`.
-- `densityMediumMax` không lớn hơn `densityLowMax`.
+## 4. Class `TrafficDensitySensor` (giả lập cảm biến xe)
 
-Module hiện chỉ cung cấp cấu hình mặc định và kiểm tra cấu hình. Việc đọc `config/default.cfg` chưa thuộc module này.
-
-## InputValidator
-
-```cpp
-bool parseVehicleCount(const std::string& text, int& vehicleCount);
-```
-
-Hàm trả về `true` nếu toàn bộ chuỗi là một số nguyên và ghi kết quả vào `vehicleCount`.
-
-| Input | Kết quả |
-|---|---|
-| `"20"` | `true`, `vehicleCount = 20` |
-| `"-5"` | `true`, `vehicleCount = -5` |
-| `"abc"` | `false` |
-| `"20 abc"` | `false` |
-| `"20.5"` | `false` |
-
-`-5` được parse thành công vì đây là lỗi giá trị sensor. Sensor mới là nơi đánh dấu số âm không hợp lệ. `abc` là lỗi cú pháp nên InputValidator từ chối ngay.
-
-## TrafficDensitySensor
+Sensor lưu riêng số xe 2 hướng NS và EW:
 
 ```cpp
 TrafficDensitySensor sensor(Config::defaults());
 
-SensorReading reading = sensor.update(Direction::NS, 20);
+// Application cập nhật khi có lệnh SENSOR_UPDATE:
+SensorReading reading = sensor.update(event.direction, event.vehicleCount);
+
+// Application hoặc Controller đọc giá trị trước khi bắt đầu GREEN:
 SensorReading current = sensor.read(Direction::NS);
 ```
 
-| Hàm | Chức năng |
-|---|---|
-| `update(direction, vehicleCount)` | Kiểm tra, phân loại và lưu reading mới cho NS hoặc EW |
-| `read(direction)` | Đọc reading đang lưu của NS hoặc EW |
+Ngưỡng phân loại mặc định:
+- `< 0` xe: `valid = false`, density `LOW` (fallback an toàn).
+- `0 - 5` xe: `LOW`
+- `6 - 15` xe: `MEDIUM`
+- `≥ 16` xe: `HIGH`
 
-Quy tắc phân loại mặc định:
+## 5. Phân định trách nhiệm theo Sơ đồ khối
 
-| Số xe | `density` | `valid` |
-|---:|---|---|
-| Nhỏ hơn `0` | `LOW` fallback | `false` |
-| `0..5` | `LOW` | `true` |
-| `6..15` | `MEDIUM` | `true` |
-| Từ `16` | `HIGH` | `true` |
+- **`ConsoleInput`**: chỉ đọc phím và trả về `Event`. Không gọi Controller, không đổi đèn.
+- **`Application` (main loop)**:
+  1. Gọi `input.poll(event)`.
+  2. Nếu là `SENSOR_UPDATE`: gọi `sensor.update(...)`. Nếu `!reading.valid` thì báo Logger ghi `SENSOR_ERROR`.
+  3. Nếu là `PEDESTRIAN_REQUEST`, `EMERGENCY_TOGGLE`, `QUIT`: chuyển sang `controller.handleEvent(event)`.
+  4. Ngay trước khi bắt đầu pha GREEN của một hướng: gọi `sensor.read(dir)` để lấy `SensorReading` đưa vào Controller tính thời lượng đèn xanh.
+- **`Controller`**: **KHÔNG cần biết hàm `update()` của sensor**, không parse chuỗi console, chỉ nhận `Event` sự kiện và nhận `SensorReading` đã được kiểm tra hợp lệ để chuyển state FSM.
 
-Các ngưỡng lấy từ `Config`, không viết trực tiếp trong Controller.
+## 6. Biên dịch và kiểm thử
 
-Controller cập nhật sensor khi nhận `SENSOR_UPDATE`, nhưng chỉ gọi `read(direction)` ngay trước khi bắt đầu GREEN của hướng đó. Nếu nhận số xe mới khi GREEN đang chạy, timer hiện tại không đổi; giá trị mới chỉ ảnh hưởng lượt GREEN tiếp theo.
-
-## EventSimulator
-
-```cpp
-EventSimulator events;
-Event event = events.parseLine("NS 20");
-```
-
-`parseLine()` chỉ phân tích lệnh và trả về `Event`, không xử lý nghiệp vụ.
-
-| Lệnh | Event |
-|---|---|
-| `P` | `PEDESTRIAN_REQUEST` |
-| `E` | `EMERGENCY_TOGGLE` |
-| `Q` | `QUIT` |
-| `NS 20` | `SENSOR_UPDATE`, hướng `NS`, số xe `20` |
-| `EW 4` | `SENSOR_UPDATE`, hướng `EW`, số xe `4` |
-| `NS abc` | `INVALID_INPUT` |
-| `NS` | `INVALID_INPUT` |
-| `NS 20 extra` | `INVALID_INPUT` |
-| Lệnh khác | `INVALID_INPUT` |
-
-Số âm như `NS -5` có cú pháp hợp lệ nên tạo `SENSOR_UPDATE`. Controller chuyển event đó cho Sensor; Sensor trả về `valid == false` để Controller/Logger xử lý `SENSOR_ERROR`.
-
-## Cách Controller tích hợp
-
-```cpp
-Config config = Config::defaults();
-TrafficDensitySensor sensor(config);
-EventSimulator events;
-
-Event event = events.parseLine(inputLine);
-
-if (event.type == EventType::SENSOR_UPDATE) {
-    SensorReading reading = sensor.update(event.direction, event.vehicleCount);
-
-    if (!reading.valid) {
-        // Ghi SENSOR_ERROR.
-        // Không thay đổi timer GREEN hiện tại.
-    }
-}
-```
-
-Khi bắt đầu GREEN, Controller lấy mật độ đang lưu:
-
-```cpp
-SensorReading reading = sensor.read(Direction::NS);
-int greenTime = config.greenLowTime;
-
-if (reading.valid && reading.density == TrafficDensity::MEDIUM) {
-    greenTime = config.greenMediumTime;
-} else if (reading.valid && reading.density == TrafficDensity::HIGH) {
-    greenTime = config.greenHighTime;
-}
-```
-
-Controller vẫn là nơi quyết định state, timer, thứ tự NS/EW và xử lý các flag `pedestrianRequested`, `emergencyPending`.
-
-## Kiểm thử
-
-Build và chạy test từ PowerShell:
+Biên dịch bằng PowerShell:
 
 ```powershell
 .\build.ps1
 .\build\traffic_tests.exe
 ```
 
-Kết quả mong đợi:
-
-```text
-Build OK.
-Input sensor tests passed.
-```
-
-Test trong `tests/test_main.cpp` bao phủ:
-
-- Density LOW, MEDIUM, HIGH.
-- Số xe âm trả `valid == false`.
-- Chuỗi không phải số bị từ chối.
-- Lệnh `P`, `E`, `NS abc`, `EW 4`.
+Test tự động trong `tests/test_main.cpp` bao gồm:
+- Phân loại mật độ `LOW`, `MEDIUM`, `HIGH`.
+- Bắt lỗi số xe âm (`valid = false`).
+- Bắt lỗi chuỗi chữ `"abc"`.
+- Buffer bàn phím: gõ `E`, `W`, ` `, `4` chưa ra event; gõ tiếp `Enter` mới ra `SENSOR_UPDATE(EW, 4)`.
+- Phân biệt độc lập giữa `E` + Enter và `EW 4` + Enter.
