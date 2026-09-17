@@ -81,7 +81,7 @@ namespace traffic
         const TrafficState previousState = currentSnapshot.state;
 
         ++currentSnapshot.simulationSecond;
-        decrementTimer();
+        decrementRemainingTime();
 
         if (currentSnapshot.remainingSeconds == 0)
         {
@@ -112,36 +112,6 @@ namespace traffic
     SystemSnapshot Controller::snapshot() const
     {
         return currentSnapshot;
-    }
-
-    TrafficState Controller::state() const
-    {
-        return currentSnapshot.state;
-    }
-
-    Direction Controller::nextDirection() const
-    {
-        return currentSnapshot.nextDirection;
-    }
-
-    int Controller::remainingSeconds() const
-    {
-        return currentSnapshot.remainingSeconds;
-    }
-
-    bool Controller::pedestrianRequested() const
-    {
-        return currentSnapshot.pedestrianRequested;
-    }
-
-    bool Controller::emergencyPending() const
-    {
-        return currentSnapshot.emergencyPending;
-    }
-
-    bool Controller::quitRequested() const
-    {
-        return quitRequestedFlag;
     }
 
     ControllerResult Controller::makeNoChangeResult() const
@@ -180,8 +150,7 @@ namespace traffic
         if (currentSnapshot.state == TrafficState::EMERGENCY)
         {
             currentSnapshot.emergencyPending = false;
-            currentSnapshot.state = TrafficState::ALL_RED;
-            currentSnapshot.remainingSeconds = config.allRedTime;
+            enterState(TrafficState::ALL_RED, config.allRedTime);
             currentSnapshot.nextDirection = Direction::NS;
             return;
         }
@@ -233,7 +202,7 @@ namespace traffic
         }
     }
 
-    void Controller::decrementTimer()
+    void Controller::decrementRemainingTime()
     {
         if (currentSnapshot.remainingSeconds > 0)
         {
@@ -243,70 +212,38 @@ namespace traffic
 
     void Controller::handleExpiredState()
     {
-        // Pedestrian decision point:
-        // - Sau khi xe GREEN hết thời gian, controller chuyển sang YELLOW.
-        // - Sau YELLOW, controller đi vào ALL_RED để đảm bảo clearance an toàn.
-        // - Sau đó mới xét: Emergency? Pedestrian request? Lượt xe kế tiếp?
-        // - Theo requirement, pedestrian request không được xóa khi bắt đầu service,
-        //   mà phải giữ cho tới khi WALK bắt đầu, rồi mới mark là đã phục vụ.
+        // Chỉ có một đường đi cho transition: qua enterState(...).
+        // Điều này giúp code dễ đọc và tránh chia logic ra nhiều nhánh khác nhau.
         switch (currentSnapshot.state)
         {
         case TrafficState::STARTUP_ALL_RED:
         case TrafficState::ALL_RED:
             if (currentSnapshot.emergencyPending)
             {
-                currentSnapshot.state = TrafficState::EMERGENCY;
-                currentSnapshot.remainingSeconds = 0;
+                enterState(TrafficState::EMERGENCY, 0);
                 break;
             }
             if (shouldServePedestrian())
             {
                 startPedestrianPhase();
-            }
-            else
-            {
-                chooseNextVehiclePhase();
-            }
-            break;
-        case TrafficState::NS_GREEN:
-            if (currentSnapshot.emergencyPending)
-            {
-                enterState(TrafficState::NS_YELLOW, config.yellowTime);
                 break;
             }
+            chooseNextVehiclePhase();
+            break;
+        case TrafficState::NS_GREEN:
             enterState(TrafficState::NS_YELLOW, config.yellowTime);
             break;
         case TrafficState::EW_GREEN:
-            if (currentSnapshot.emergencyPending)
-            {
-                enterState(TrafficState::EW_YELLOW, config.yellowTime);
-                break;
-            }
             enterState(TrafficState::EW_YELLOW, config.yellowTime);
             break;
         case TrafficState::NS_YELLOW:
         case TrafficState::EW_YELLOW:
-            if (currentSnapshot.emergencyPending)
-            {
-                enterState(TrafficState::ALL_RED, config.allRedTime);
-                break;
-            }
             enterState(TrafficState::ALL_RED, config.allRedTime);
             break;
         case TrafficState::PED_WALK:
-            if (currentSnapshot.emergencyPending)
-            {
-                enterState(TrafficState::PED_WARNING, config.pedestrianWarningTime);
-                break;
-            }
             enterState(TrafficState::PED_WARNING, config.pedestrianWarningTime);
             break;
         case TrafficState::PED_WARNING:
-            if (currentSnapshot.emergencyPending)
-            {
-                enterState(TrafficState::ALL_RED, config.allRedTime);
-                break;
-            }
             enterState(TrafficState::ALL_RED, config.allRedTime);
             break;
         case TrafficState::EMERGENCY:
@@ -327,11 +264,6 @@ namespace traffic
         currentSnapshot.nextDirection = opposite(activeDirection);
     }
 
-    void Controller::chooseAllRedDestination()
-    {
-        enterState(TrafficState::ALL_RED, config.allRedTime);
-    }
-
     void Controller::startPedestrianPhase()
     {
         // Safe pedestrian service start:
@@ -346,38 +278,6 @@ namespace traffic
         currentSnapshot.pedestrianRequested = false;
         pedestrianCooldown = true;
         enterState(TrafficState::PED_WALK, config.pedestrianWalkTime);
-    }
-
-    void Controller::startEmergencyClearance() {}
-
-    int Controller::durationFor(TrafficState state, Direction direction) const
-    {
-        if (state == TrafficState::NS_GREEN || state == TrafficState::EW_GREEN)
-        {
-            return greenDurationFor(readTrafficDensity(direction));
-        }
-
-        if (state == TrafficState::NS_YELLOW || state == TrafficState::EW_YELLOW)
-        {
-            return config.yellowTime;
-        }
-
-        if (isAllRed(state))
-        {
-            return config.allRedTime;
-        }
-
-        if (state == TrafficState::PED_WALK)
-        {
-            return config.pedestrianWalkTime;
-        }
-
-        if (state == TrafficState::PED_WARNING)
-        {
-            return config.pedestrianWarningTime;
-        }
-
-        return 0;
     }
 
     TrafficDensity Controller::readTrafficDensity(Direction direction) const
@@ -406,45 +306,9 @@ namespace traffic
         return direction == Direction::NS ? TrafficState::NS_GREEN : TrafficState::EW_GREEN;
     }
 
-    TrafficState Controller::yellowStateFor(Direction direction) const
-    {
-        return direction == Direction::NS ? TrafficState::NS_YELLOW : TrafficState::EW_YELLOW;
-    }
-
-    TrafficState Controller::allRedStateToward(Direction direction) const
-    {
-        (void)direction;
-        return TrafficState::ALL_RED;
-    }
-
     Direction Controller::opposite(Direction direction) const
     {
         return direction == Direction::NS ? Direction::EW : Direction::NS;
-    }
-
-    bool Controller::isVehicleGreen(TrafficState state) const
-    {
-        return state == TrafficState::NS_GREEN || state == TrafficState::EW_GREEN;
-    }
-
-    bool Controller::isVehicleYellow(TrafficState state) const
-    {
-        return state == TrafficState::NS_YELLOW || state == TrafficState::EW_YELLOW;
-    }
-
-    bool Controller::isAllRed(TrafficState state) const
-    {
-        return state == TrafficState::STARTUP_ALL_RED || state == TrafficState::ALL_RED;
-    }
-
-    bool Controller::isPedestrianPhase(TrafficState state) const
-    {
-        return state == TrafficState::PED_WALK || state == TrafficState::PED_WARNING;
-    }
-
-    bool Controller::isEmergencyState(TrafficState state) const
-    {
-        return state == TrafficState::EMERGENCY;
     }
 
     bool Controller::shouldServePedestrian() const
