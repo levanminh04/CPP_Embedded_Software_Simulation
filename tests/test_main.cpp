@@ -1,6 +1,7 @@
 #include "traffic/ConsoleInput.h"
 #include "traffic/Controller.h"
 #include "traffic/InputValidator.h"
+#include "traffic/Output.h"
 #include "traffic/Sensor.h"
 
 #include <cassert>
@@ -17,8 +18,111 @@ void advance(Controller &controller, int seconds)
     }
 }
 
+Config testConfig()
+{
+    Config config = Config::defaults();
+    config.greenLowTime = 2;
+    config.greenMediumTime = 3;
+    config.greenHighTime = 4;
+    config.yellowTime = 1;
+    config.allRedTime = 1;
+    config.pedestrianWalkTime = 2;
+    config.pedestrianWarningTime = 1;
+    assert(config.isValid());
+    return config;
+}
+
+void testT1NormalTrafficSequence()
+{
+    // T1: Chế độ bình thường phải đi theo RED -> GREEN -> YELLOW -> RED.
+    Controller controller(testConfig());
+
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::NS_GREEN);
+
+    advance(controller, 2);
+    assert(controller.snapshot().state == TrafficState::NS_YELLOW);
+
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::ALL_RED);
+}
+
+void testT2PedestrianRequestDuringGreen()
+{
+    // T2: Nhấn P khi GREEN phải ghi nhận request, sau đó chờ đến điểm an toàn.
+    Controller controller(testConfig());
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::NS_GREEN);
+
+    const ControllerResult requestResult =
+        controller.apply({EventType::PEDESTRIAN_REQUEST, Direction::NS, 0, ""});
+    assert(requestResult.action == ControllerAction::PEDESTRIAN_REQUEST_RECORDED);
+    assert(controller.snapshot().pedestrianRequested);
+
+    advance(controller, 2);
+    assert(controller.snapshot().state == TrafficState::NS_YELLOW);
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::ALL_RED);
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::PED_WALK);
+}
+
+void testT3PedestrianGreenForcesVehicleRed()
+{
+    // T3: Khi pedestrian GREEN, cả hai hướng xe bắt buộc phải RED.
+    const LightOutput lights = Output().fromState(TrafficState::PED_WALK);
+
+    assert(lights.pedestrian == PedestrianLight::GREEN);
+    assert(lights.ns == VehicleLight::RED);
+    assert(lights.ew == VehicleLight::RED);
+}
+
+void testT4EmergencyReachesSafeState()
+{
+    // T4: Emergency không cắt ngang GREEN; hệ thống phải qua YELLOW và ALL_RED.
+    Controller controller(testConfig());
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::NS_GREEN);
+
+    const ControllerResult emergencyResult =
+        controller.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(emergencyResult.action == ControllerAction::EMERGENCY_ON_REQUESTED);
+    assert(controller.snapshot().emergencyPending);
+
+    advance(controller, 2);
+    assert(controller.snapshot().state == TrafficState::NS_YELLOW);
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::ALL_RED);
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::EMERGENCY);
+}
+
+void testT5EmergencyExitReturnsToNormalMode()
+{
+    // T5: Thoát Emergency đưa hệ thống về ALL_RED rồi trở lại normal mode.
+    Controller controller(testConfig());
+    controller.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::EMERGENCY);
+
+    const ControllerResult exitResult =
+        controller.apply({EventType::EMERGENCY_TOGGLE, Direction::NS, 0, ""});
+    assert(exitResult.action == ControllerAction::EMERGENCY_OFF_REQUESTED);
+    assert(controller.snapshot().state == TrafficState::ALL_RED);
+    assert(controller.snapshot().nextDirection == Direction::NS);
+
+    advance(controller, 1);
+    assert(controller.snapshot().state == TrafficState::NS_GREEN);
+}
+
 int main()
 {
+    testT1NormalTrafficSequence();
+    testT2PedestrianRequestDuringGreen();
+    testT3PedestrianGreenForcesVehicleRed();
+    testT4EmergencyReachesSafeState();
+    testT5EmergencyExitReturnsToNormalMode();
+
     Config config = Config::defaults();
     assert(config.isValid());
 
