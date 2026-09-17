@@ -1,7 +1,23 @@
+#include "traffic/Application.h"
+
+#include <exception>
 #include <iostream>
 
 int main()
 {
-    std::cout << "Hello, Smart Traffic Light Controller!\n";
-    return 0;
+    try
+    {
+        traffic::Application app;
+
+        return app.run();
+    }
+    catch (const std::exception &exception)
+    {
+        std::cerr
+            << "Fatal error: "
+            << exception.what()
+            << '\n';
+
+        return 1;
+    }
 }
