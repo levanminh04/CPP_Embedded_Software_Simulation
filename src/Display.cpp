@@ -87,7 +87,7 @@ void Display::show(
             << snapshot.ewVehicleCount << '\n'
             << "Command              : " << command << "\n"
             << "====================================\n"
-            << "Nhap lenh roi nhan Enter\n"
+            << "Enter a command and press Enter\n"
             << "P = Pedestrian request | E = Emergency ON/OFF | Q = Quit\n"
             << "NS 20 = NS sensor     | EW 4 = EW sensor\n"
             << std::flush;

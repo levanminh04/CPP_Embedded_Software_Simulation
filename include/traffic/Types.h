@@ -9,15 +9,13 @@ enum class Direction {
     EW
 };
 
-enum class TrafficDensity
-{
+enum class TrafficDensity {
     LOW,
     MEDIUM,
     HIGH
 };
 
-struct SensorReading
-{
+struct SensorReading {
     int vehicleCount = 0;
     TrafficDensity density = TrafficDensity::LOW;
     bool valid = true;
