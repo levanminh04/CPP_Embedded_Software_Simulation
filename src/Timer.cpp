@@ -1,4 +1,4 @@
-#include "../include/Timer.h"
+#include "../include/traffic/Timer.h"
 
 Timer::Timer(int intervalMs)
     : intervalMs_(intervalMs),
@@ -8,16 +8,22 @@ Timer::Timer(int intervalMs)
 
 bool Timer::isTick()
 {
-    auto now = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
 
-    auto elapsed =
+    const auto elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - lastTick_)
-            .count();
+            now - lastTick_);
 
-    if (elapsed >= intervalMs_)
+    if (elapsed >= std::chrono::milliseconds(intervalMs_))
     {
-        lastTick_ = now;
+        // Không dùng:
+        // lastTick_ = now;
+        //
+        // Vì now có thể là 1005 ms, 2026 ms...
+        // Nếu gán trực tiếp sẽ làm trôi mốc thời gian.
+
+        lastTick_ += std::chrono::milliseconds(intervalMs_);
+
         return true;
     }
 
