@@ -144,8 +144,6 @@ Xem [Sơ đồ trạng thái](State_Diagram.png) và file nguồn [State_Diagram
 
 ## 7. Các luồng cần kiểm thử
 
-Các mục dưới đây mô tả hành vi cần kiểm thử; chúng không yêu cầu chương trình phải có module chạy kịch bản tự động.
-
 | Mã | Luồng kiểm thử | Kết quả mong đợi |
 |---|---|---|
 | AT-01 | Chạy bình thường | Quyền đi luân phiên GREEN -> YELLOW -> ALL-RED; có countdown và log. |
