@@ -225,3 +225,14 @@ git push -u origin feature/<module>
 ```
 
 Không dùng `git add .` khi workspace có file chưa hoàn thiện của module khác.
+
+## Phân công công việc
+
+| Công việc | Phụ trách | Hạn hoàn thành | Trạng thái | Sản phẩm / kết quả | Liên kết |
+| --- | :---: | :---: | :---: | --- | --- |
+| Soạn tài liệu, đối chiếu với đề bài của anh Hiếu, quy tắc, test case, kịch bản demo, vẽ block diagram, state diagram và test đầu cuối | Phạm Thị Ngân | hết 13/9 | Đã hoàn thành | Tập tài liệu | — |
+| Tạo repository, phân quyền Pull Request, dựng codebase, chốt môi trường cố định để chạy code, viết README hướng dẫn build/run, tạo file rỗng định hình cấu trúc, review code và merge code | Lê Văn Minh | hết 13/9 | Đã hoàn thành | <code>Group_X_Project/</code><br>├── <code>include/</code><br>│   └── <code>*.h</code><br>├── <code>src/</code><br>│   └── <code>*.cpp</code><br>├── <code>logs/</code><br>│   └── <code>system.log</code><br>├── <code>docs/</code><br>│   ├── <code>Requirement.md</code><br>│   ├── <code>Block_Diagram.png</code><br>│   ├── <code>State_Diagram.png</code><br>│   └── <code>Test_Cases.xlsx</code><br>├── <code>main.cpp</code><br>└── <code>README.md</code> | [GitHub](https://github.com/levanminh04/CPP_Embedded_Software_Simulation) |
+| Mô phỏng sensor/event và validate input | Trần Bá Lợi | tối 17/9 | Đã hoàn thành | Code chạy được happy case | — |
+| Xử lý logic điều khiển | Phùng Trung Kiên | tối 17/9 | Đã hoàn thành | Code chạy được happy case | — |
+| Actuator/state/display | Trần Đức Trung | tối 17/9 | Đã hoàn thành | Code chạy được happy case | — |
+| Timer, logging và error handling | Nguyễn Thanh Phong | tối 17/9 | Đã hoàn thành | Code chạy được happy case | — |
